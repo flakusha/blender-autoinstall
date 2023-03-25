@@ -1,0 +1,37 @@
+# Blender installer settings
+# Blender path for installation - by default locally unpacked blender portable
+# executable will be used, but it can be changed, Blender version will be
+# captured using this executable
+blender_path = "../../blender_portable/blender"
+# Autodetect addon path using blender executable, defaults to user config folder
+addon_path_autodetect = true
+# Use custom addon name, default "blender_install"
+addon_name = "blender_install"
+# check checksums of binaries when installing
+binaries_checksum = true
+# Point where to link/install addon, by default it's installed to the user's
+# default addons folder, can be autodetected
+# addon_path = "~/.config/blender/3.4/scripts/addons"
+# addon_path = "../../blender_portable/3.4/scripts/addons"
+
+# Copy / link settings
+# Use link by default to avoid copying files from the repository to blender,
+# otherwise copy this whole repository
+addon_create_link = true
+# Use ignore/include files - modify include and ignore files to only copy data
+# you actually need in config file. Not used if addon is linked.
+use_ignore = true
+use_include = true
+
+# Addon activation
+# Activate listed addons by their names
+activate_addons = [
+ "F2",
+]
+
+# Binaries
+# Copy binaries from provided binaries location, or just leave them available
+# to use in Python where they are
+binaries_copy = false
+# Try to compile additional executables to use with plugin
+binaries_compile = false
