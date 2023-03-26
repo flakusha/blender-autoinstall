@@ -31,29 +31,30 @@ def executable_exists(name: Union[str, Path]) -> bool:
 
 
 def try_to_install(cfg: InstallConfig):
-    """
-    Tries to symlink addon to addon folder, if fails - copies addon's files.
+    """Tries to symlink addon to addon folder, if fails - copies addon's files.
 
     Parameters:
     -----------
     cfg : InstallConfig
         Object with parsed and verified configuration.
     """
-    kw = kwargs.keys()
-    cur_folder = Path(os.getcwd())
+    symlynk_or_copy(cfg)
+    manage_binaries(cfg)
 
-    tgt_folder = Path(kwargs["folder"])
 
+def symlynk_or_copy(cfg: InstallConfig):
+    cur_folder = cfg.current_folder
+    addon_path = cfg.addon_path
     # Check that symlink already exists or user is able to create it, thus
     # any kind of *heavy* file copying is not needed
     chk_symlink = False
 
     # Remove release folder if it already exists, just to make sure copytree is
     # ok and runs without errors
-    if chk_folder.exists():
-        if chk_folder.is_symlink():
+    if addon_path.exists():
+        if addon_path.is_symlink():
             print("Target folder is symlink, resolving")
-            chk = chk_folder.resolve()
+            chk = addon_path.resolve(True)
 
             # Guarantee two Path objects are compared, not some arbitrary data
             if Path(chk) == Path(cur_folder):
@@ -64,30 +65,32 @@ def try_to_install(cfg: InstallConfig):
                 chk_symlink = True
             else:
                 print("Symlink path is incorrect, removing it")
-                os.unlink(chk_folder)
+                os.unlink(addon_path)
 
-        elif chk_folder.is_dir():
+        elif addon_path.is_dir():
             print("Target folder is folder")
-            if not chk_folder.is_symlink():
-                print(f"Removing previous folder: {chk_folder}")
-                shutil.rmtree(chk_folder)
-            elif chk_folder.is_symlink():
-                print(f"Removing previous folder symlink: {chk_folder}")
-                os.unlink(chk_folder)
+            if not addon_path.is_symlink():
+                print(f"Removing previous folder: {addon_path}")
+                shutil.rmtree(addon_path)
+            elif addon_path.is_symlink():
+                print(f"Removing previous folder symlink: {addon_path}")
+                os.unlink(addon_path)
 
-        elif chk_folder.is_file():
+        elif addon_path.is_file():
             print("Target folder is file")
-            print(f"Removing 'file': {chk_folder}")
-            os.unlink(chk_folder)
+            print(f"Removing 'file': {addon_path}")
+            os.unlink(addon_path)
+        else:
+            raise OSError(f"Addon path is not symlink/directory/file")
 
     if not chk_symlink:
         try:
-            os.symlink(os.path.abspath(cur_folder), os.path.abspath(chk_folder), True)
+            os.symlink(os.path.abspath(cur_folder), os.path.abspath(addon_path), True)
 
             if all(
                 (
-                    chk_folder.is_symlink(),
-                    Path(chk_folder.resolve(True)) == Path(cur_folder),
+                    addon_path.is_symlink(),
+                    Path(addon_path.resolve(True)) == Path(cur_folder),
                 )
             ):
                 # Symlink creation successfull - no need to copy
@@ -98,10 +101,15 @@ def try_to_install(cfg: InstallConfig):
                 chk_symlink = True
 
         except Exception as e:
-            print("Symlink creation failed - trying to copy addon files instead")
-            print(e)
+            print(f"Symlink creation failed - trying to copy addon files instead:\n{e}")
+            try:
+                shutil.copytree(cfg.current_folder, cfg.addon_path)
+            except Exception as e:
+                print(f"All installation methods exausted. Tree copy failed: {e}")
 
-    if "compile" in kw:
+
+def manage_binaries(cfg: InstallConfig):
+    if cfg.binaries_compile:
         if kwargs["compile"]:
             print("Compilation of binaries is not yet supported\n")
         else:
@@ -121,7 +129,7 @@ def try_to_install(cfg: InstallConfig):
 
     path_addon = shutil.copytree(
         os.getcwd(),
-        chk_folder,
+        addon_path,
         ignore=ignore_patterns(*(pat for pat in ignore_files)),
     )
 
@@ -141,7 +149,7 @@ def try_to_install(cfg: InstallConfig):
             cur_folder = os.getcwd()  # Update the variable after the cd
             print(f"Changed working directory to: {os.getcwd()}")
             shutil.make_archive(
-                chk_folder.parts[-1], "zip", tgt_folder, chk_folder.parts[-1]
+                addon_path.parts[-1], "zip", tgt_folder, addon_path.parts[-1]
             )
 
             print("Release zip is ready")

@@ -1,8 +1,5 @@
 import os
-import sys
-import platform
 import argparse
-import shutil
 from pathlib import Path
 from typing import Tuple, Set
 
@@ -13,7 +10,6 @@ from typing import Tuple, Set
 
 # Now import is available
 from install_utils import (
-    executable_exists,
     try_to_install,
     copy_precompiled,
     run_process,
@@ -22,7 +18,7 @@ from install_utils import (
 from install_config import InstallConfig
 
 
-def install_addon(cfg: InstallConfig) -> Tuple[bool, Path]:
+def install_addon(cfg: InstallConfig):
     """
     Install plugin to specified folder.
 
@@ -31,11 +27,8 @@ def install_addon(cfg: InstallConfig) -> Tuple[bool, Path]:
     cfg : InstallConfig
         Parsed and validated configuration file object.
     """
-    path_current = Path(os.path.dirname(os.path.realpath(__file__)))
-    blender_exec = Path(cfg.blender_path).resolve()
+    path_current = cfg.current_folder
     addon_name = cfg.addon_name
-
-    version = cfg.blender_version
 
     # Now it's possible to select correct folder and config
     addon_path: Path = cfg.addon_path
@@ -43,23 +36,50 @@ def install_addon(cfg: InstallConfig) -> Tuple[bool, Path]:
     if addon_path.parts[-1] != addon_name:
         addon_path = Path(addon_path, addon_name)
 
-    if args.compile_binaries:
-        print("Compilation of binaries is not yet supported")
-    else:
-        copy_precompiled(os.getcwd())
-
-    print("Syncing addon folder")
-    print(path_current, "->", addon_path)
+    print(f"Syncing addon folder\nFr: {path_current}\nTo: {addon_path}")
 
     try_to_install(cfg)
 
-    # If it's dry run don't try to activate addons later,
-    # so False will be returned
-    return inst, addon_path
+
+def install_pip(cfg: InstallConfig) -> bool:
+    """Install pip for instance of Blender3D.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Parsed and validated config object.
+
+    Returns:
+    --------
+    bool
+        PIP activation is successfull.
+    """
+    if cfg.install_pip_script is None:
+        print("No PIP install script provided, skipping")
+
+    # Install pip
+    print("Trying to install PIP")
+    install_pip_script = cfg.install_pip_script
+
+    install_cmd = [
+        args.blender,
+        "-b",
+        "-P",
+        str(install_pip_script),
+    ]
+
+    ec, so, se, er = run_process(
+        install_cmd, "Failed to install pip", 30, print_std=False
+    )
+
+    if ec != 0:
+        return False
+
+    return True
 
 
 def activate_addons(cfg: InstallConfig) -> bool:
-    """Install pip for instance of Blender3D.
+    """
     Activate addons that are found in config.activate_addons list.
     Only addon names are supported.
     Be careful, addon_utils are stabilized, but not documented in Blender3D API.
@@ -74,34 +94,19 @@ def activate_addons(cfg: InstallConfig) -> bool:
     Returns:
     --------
     bool
-        PIP activation and addon instllation is successfull.
+        Addon activation is successfull.
     """
-    if not cfg.activate_addons:
-        print("Skipping PIP installation and addon activation")
+
+    if len(cfg.activate_addons) == 0:
+        print("Skipping addon activation")
         return True
 
-    # Install pip
-    print("Trying to install PIP")
-    install_pip_script = os.path.dirname(Path(__file__))
-    install_pip_script = Path(install_pip_script, "install_pip.py")
-
-    install_cmd = [
-        args.blender,
-        "-b",
-        "-P",
-        str(install_pip_script),
-    ]
-
-    print("Pip activation result:")
-    ec, so, se, er = run_process(install_cmd, "Pip is not active", 20, print_std=False)
-
-    if ec != 0:
+    if cfg.install_activate_script is None:
+        print("No activation script provided, but activation is requested, aborting")
         return False
 
-    # Assume that previous part of code was successful with
-    # blender executable and additional check is not needed
-    activate_script = os.path.dirname(Path(__file__))
-    activate_script = Path(activate_script, "activate.py")
+    inst_act_script = Path(os.path.dirname(Path(__file__)), "install_activate.py")
+
     update_cmd = [
         args.blender,
         "-b",
@@ -142,11 +147,17 @@ if __name__ == "__main__":
 
     if PLATFORM in ("Linux", "Darwin", "Windows"):
         print(f"Installing plugin for platform: {PLATFORM}")
-        installed = install_addon(cfg)
+        install_addon(cfg)
+
+        print("Trying to activate addons")
+        if not install_pip(cfg):
+            exit(1)
+
+        if not activate_addons(cfg):
+            exit(1)
+
+        if not install_custom(cfg):
+            exit(1)
     else:
         print(f"Installation on this OS({PLATFORM}) is not supported.")
         print("Please install addon manually...")
-
-    if installed is not None:
-        print("Trying to activate addons")
-        activate_addons(cfg)
