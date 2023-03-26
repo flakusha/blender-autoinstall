@@ -11,7 +11,9 @@ class InstallConfig:
     """
 
     blender_path: Path
-    blender_version: str
+    blender_python_dir: Path
+    blender_python_version: str
+    blender_version: Optional[str]
     addon_path_autodetect: bool
     addon_path_user: bool
     addon_name: str
@@ -19,16 +21,18 @@ class InstallConfig:
     addon_create_link: bool
     use_ignore: bool
     use_include: bool
-    activate_addons: List[str]
     binaries_checksum: bool
     binaries_copy: bool
     binaries_compile: bool
 
     current_folder: Path
     install_pip_script: Optional[Path]
+    pip_modules: Optional[str]
     install_activate_script: Optional[Path]
+    activate_addons: List[str]
     install_custom_script: Optional[Path]
     install_custom_timeout: float
+    install_custom_args: List[str]
 
     def __init__(self, cfg_file: Path):
         cfg: Dict[str, Any] = toml.load(cfg_file)
@@ -58,21 +62,25 @@ class InstallConfig:
             raise OSError("Provided blender_path doesn't exist or is not executable")
 
         self.blender_version = self.get_blender_version(self.blender_path)
+        self.blender_python_dir = self.get_blender_python_dir()
+        self.blender_python_version = self.get_blender_python_version()
         self.addon_path = self.get_addon_path(cfg)
 
         # These fields do not require specific methods (yet)
         self.addon_create_link = cfg.get("addon_create_link", True)
         self.use_ignore = cfg.get("use_ignore", True)
         self.use_include = cfg.get("use_include", True)
-        self.activate_addons = cfg.get("activate_addons", [])
         self.binaries_copy = cfg.get("binaries_copy", False)
         self.binaries_compile = cfg.get("binaries_compile", False)
 
         # Get custom scripts for installation of additional components
         install_pip_script = cfg.get("install_pip_script")
+        pip_modules = cfg.get("pip_modules", [])
         install_activate_script = cfg.get("install_activate_script")
+        self.activate_addons = cfg.get("activate_addons", [])
         install_custom_script = cfg.get("install_custom_script")
         self.install_custom_timeout = cfg.get("install_custom_script", 30.0)
+        self.install_custom_args = cfg.get("install_custom_args", [])
 
         # No script provided == step skipped
         for field, script_name in {
@@ -183,3 +191,61 @@ class InstallConfig:
                     print(f"User provided {script_name}, but no script file found")
 
         return None
+
+    def get_blender_python_dir(self) -> Path:
+        """Finds the python root dir for blender.
+
+        Returns:
+        --------
+        Path
+            Path to the root of Python directory.
+        """
+        # Get the blender version if the executable run failed, so return statement
+        # is valid, otherwise raise Exception, as it's impossible to work with
+        # non-portable release
+        if self.blender_version is None:
+            files = os.listdir(str(self.blender_path.parent))
+            py_found = False
+
+            for file in files:
+                if all(
+                    (
+                        file[0].isdigit(),
+                        file[-1].isdigit(),
+                        len(file) > 1,
+                        os.path.isdir(
+                            os.path.join(str(self.blender_path.parent), file)
+                        ),
+                    )
+                ):
+                    self.blender_version = file
+                    py_found = True
+                    break
+
+            if not py_found:
+                raise Exception("Blender Python root directory is not found")
+
+        return Path(self.blender_path.parent, self.blender_version, "python").resolve(
+            True
+        )
+
+    def get_blender_python_version(self) -> str:
+        """Using blender python dir find the python version.
+
+        Returns:
+        --------
+        str
+            Blender Python version.
+        """
+        python_bin_path = Path(self.blender_python_dir, "bin")
+
+        files = os.listdir(str(python_bin_path))
+        ver_found = False
+
+        for file in files:
+            if file.startswith("python"):
+                ver_found = True
+                return file.removeprefix("python")
+
+        if not ver_found:
+            raise Exception("Python version is not found")

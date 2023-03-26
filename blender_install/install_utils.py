@@ -45,6 +45,7 @@ def try_to_install(cfg: InstallConfig):
 def symlynk_or_copy(cfg: InstallConfig):
     cur_folder = cfg.current_folder
     addon_path = cfg.addon_path
+
     # Check that symlink already exists or user is able to create it, thus
     # any kind of *heavy* file copying is not needed
     chk_symlink = False

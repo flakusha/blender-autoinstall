@@ -16,8 +16,13 @@ binaries_checksum = true
 # default addons folder, can be autodetected
 # addon_path = "~/.config/blender/3.4/scripts/addons"
 # addon_path = "../../blender_portable/3.4/scripts/addons"
-# Use custom script to install pip
+# Use custom script to install pip, will be skipped if pip is not provided
 install_pip_script = "install_pip.py"
+# This will install additional Python modules for use with your addon
+# pip install format is supported
+pip_modules = [
+ "wheel>=0.1",
+]
 # Use custom script to activate addons
 install_activate_script = "install_activate.py"
 # Addon activation
@@ -29,6 +34,8 @@ activate_addons = [
 # install_custom_script = "install_custom.py"
 # for the custom script it's harder to predict the timeout, so set it here (seconds)
 # install_custom_timeout = 30.0
+# Provide custom arguments for your script
+# install_custom_args = []
 
 # Copy / link settings
 # Use link by default to avoid copying files from the repository to blender,
@@ -38,7 +45,6 @@ addon_create_link = true
 # you actually need in config file. Not used if addon is linked.
 use_ignore = true
 use_include = true
-
 
 # Binaries
 # Copy binaries from provided binaries location, or just leave them available

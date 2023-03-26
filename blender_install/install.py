@@ -1,4 +1,3 @@
-import os
 import argparse
 from pathlib import Path
 from typing import Tuple, Set
@@ -57,32 +56,29 @@ def install_pip(cfg: InstallConfig) -> bool:
     if cfg.install_pip_script is None:
         print("No PIP install script provided, skipping")
 
-    # Install pip
     print("Trying to install PIP")
-    install_pip_script = cfg.install_pip_script
 
-    install_cmd = [
-        args.blender,
+    cmd = [
+        str(cfg.blender_path),
         "-b",
         "-P",
-        str(install_pip_script),
+        str(cfg.install_pip_script),
     ]
 
-    ec, so, se, er = run_process(
-        install_cmd, "Failed to install pip", 30, print_std=False
-    )
+    if cfg.pip_modules is not None:
+        if len(cfg.pip_modules) > 0:
+            cmd.extend(["--", "-m", ",".join(m for m in cfg.pip_modules)])
 
-    if ec != 0:
-        return False
+    ec, so, se, er = run_process(cmd, "Failed to install pip", 30, print_std=False)
 
-    return True
+    return ec == 0
 
 
 def activate_addons(cfg: InstallConfig) -> bool:
     """
     Activate addons that are found in config.activate_addons list.
     Only addon names are supported.
-    Be careful, addon_utils are stabilized, but not documented in Blender3D API.
+    addon_utils are stabilized, but not documented in Blender3D API.
     For information see sources:
     https://github.com/blender/blender/blob/master/release/scripts/modules/addon_utils.py
 
@@ -97,32 +93,61 @@ def activate_addons(cfg: InstallConfig) -> bool:
         Addon activation is successfull.
     """
 
-    if len(cfg.activate_addons) == 0:
-        print("Skipping addon activation")
-        return True
-
     if cfg.install_activate_script is None:
         print("No activation script provided, but activation is requested, aborting")
         return False
 
-    inst_act_script = Path(os.path.dirname(Path(__file__)), "install_activate.py")
-
-    update_cmd = [
-        args.blender,
+    cmd = [
+        str(cfg.blender_path),
         "-b",
         "-P",
-        str(activate_script),
+        str(cfg.install_activate_script),
     ]
 
-    print("Activation result for addons and other components:")
+    if len(cfg.activate_addons) > 0:
+        cmd.extend(["--", "-a", ",".join(a for a in cfg.activate_addons)])
+
+    print("Activating addons and components")
+    ec, so, se, er = run_process(cmd, "Addon activation failed", 60, print_std=False)
+
+    return ec == 0
+
+
+def run_custom_script(cfg: InstallConfig) -> bool:
+    """Run custom script which is needed to set up additional components for the addon.
+    If no script is provided, this stage will be skipped.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Parsed and validated config object.
+
+    Returns:
+    --------
+    bool
+        Script run successfully.
+    """
+    if cfg.install_custom_script is None:
+        print("skipping custom script")
+        return True
+
+    cmd = [
+        str(cfg.blender_path),
+        "-b",
+        "-P",
+        str(cfg.install_custom_script),
+    ]
+
+    if len(cfg.install_custom_args) > 0:
+        cmd.append("--")
+        cmd.extend(cfg.install_custom_args)
+
+    print("Running custom script:")
     ec, so, se, er = run_process(
-        update_cmd, "Addon activation failed", 60, print_std=False
+        cmd, "Custom script run failed", cfg.install_custom_timeout, print_std=False
     )
 
-    if ec != 0:
-        return False
-
-    return True
+    return ec == 0
 
 
 if __name__ == "__main__":
@@ -135,7 +160,7 @@ if __name__ == "__main__":
         "-c",
         "--config",
         type=Path,
-        help="Path to installation config yaml",
+        help="Path to installation config toml",
         default=Path(Path(__file__).resolve(), "install_config.toml"),
     )
 
@@ -156,8 +181,9 @@ if __name__ == "__main__":
         if not activate_addons(cfg):
             exit(1)
 
-        if not install_custom(cfg):
+        if not run_custom_script(cfg):
             exit(1)
+
     else:
         print(f"Installation on this OS({PLATFORM}) is not supported.")
         print("Please install addon manually...")
