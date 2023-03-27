@@ -1,7 +1,7 @@
 import os
 import toml
 from pathlib import Path
-from typing import Dict, Optional, Union, List, Any
+from typing import Dict, Set, List, Optional, Union, Any
 from install_utils import executable_exists, run_process, PLATFORM
 
 
@@ -12,6 +12,7 @@ class InstallConfig:
 
     blender_packed: Optional[Path]
     blender_unpack: bool
+    blender_overwrite: bool
     blender_path: Path
     blender_python_dir: Path
     blender_python_version: str
@@ -21,8 +22,12 @@ class InstallConfig:
     addon_name: str
     addon_path: Path
     addon_create_link: bool
+    addon_allowed_paths: Set[Path]
     use_ignore: bool
     use_include: bool
+
+    binaries_precompiled_path: Path
+    binaries_path: Path
     binaries_checksum: bool
     binaries_copy: bool
     binaries_compile: bool
@@ -36,6 +41,9 @@ class InstallConfig:
     install_custom_timeout: float
     install_custom_args: List[str]
 
+    install_include: Optional[Path]
+    install_exclude: Optional[Path]
+
     def __init__(self, cfg_file: Path):
         cfg: Dict[str, Any] = toml.load(cfg_file)
         self.validate_config(cfg)
@@ -45,11 +53,15 @@ class InstallConfig:
         self.addon_name = cfg.get("blender_install", "blender_install")
         self.addon_path_autodetect = cfg.get("addon_path_autodetect", True)
         self.addon_path_user = cfg.get("addon_path_user", True)
+        self.addon_allowed_paths = set(cfg.get("addon_allowed_paths", []))
         self.current_folder = Path(os.getcwd()).resolve(True)
         self.blender_unpack = cfg.get("blender_unpack", True)
         self.blender_packed = cfg.get("blender_packed")
+        self.blender_overwrite = cfg.get("blender_overwrite", True)
 
         self.blender_path = self.get_blender_path(cfg)
+        self.binaries_precompiled_path = self.get_binaries_precompiled_path(cfg)
+        self.binaries_path = self.get_binaries_path(cfg)
 
         if not executable_exists(self.blender_path):
             if self.blender_unpack:
@@ -98,6 +110,15 @@ class InstallConfig:
             else:
                 setattr(self, field, None)
 
+        self.install_include = cfg.get("install_include")
+        self.install_exclude = cfg.get("install_exclude")
+
+        if self.install_include is not None:
+            self.install_include = Path(self.install_include).resolve(True)
+
+        if self.install_exclude is not None:
+            self.install_exclude = Path(self.install_exclude).resolve(True)
+
     def get_blender_path(self, cfg: Dict[str, Any]) -> Path:
         return Path(
             cfg.get(
@@ -105,10 +126,25 @@ class InstallConfig:
                 Path(
                     Path(__file__).resolve(True),
                     "..",
-                    "..",
                     "blender_portable",
                     "blender",
-                ).resolve(True),
+                ),
+            )
+        ).resolve(True)
+
+    def get_binaries_precompiled_path(self, cfg: Dict[str, Any]) -> Path:
+        return Path(
+            cfg.get(
+                "binaries_precompiled_path",
+                Path(Path(__file__).resolve(True), "..", "binaries"),
+            ),
+        )
+
+    def get_binaries_path(self, cfg: Dict[str, Any]) -> Path:
+        return Path(
+            cfg.get(
+                "binaries_path",
+                Path(Path(__file__).resolve(True), "bin"),
             )
         ).resolve(True)
 

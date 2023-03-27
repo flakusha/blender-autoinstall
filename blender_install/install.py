@@ -1,5 +1,4 @@
 import argparse
-from shutil import rmtree
 from pprint import pprint
 from pathlib import Path
 from typing import Tuple, Set
@@ -14,6 +13,7 @@ from install_utils import (
     try_to_install,
     copy_precompiled,
     run_process,
+    rmtree_protected,
     PLATFORM,
 )
 from install_config import InstallConfig
@@ -46,6 +46,9 @@ def unpack_portable_blender(cfg: InstallConfig):
             if not checksum_file(source):
                 print("Archive is damaged or checksum is not provided")
                 return
+
+        if cfg.blender_overwrite:
+            rmtree_protected(target, cfg.addon_allowed_paths)
 
         if source.suffix in {".xz", ".gz", "bz2"}:
             import tarfile
@@ -128,8 +131,8 @@ def install_pip(cfg: InstallConfig) -> bool:
 
 
 def activate_addons(cfg: InstallConfig) -> bool:
-    """
-    Activate addons that are found in config.activate_addons list.
+    """Setup Blender3D for rendering and also activate addons that are found in
+    config.activate_addons list.
     Only addon names are supported.
     addon_utils are stabilized, but not documented in Blender3D API.
     For information see sources:

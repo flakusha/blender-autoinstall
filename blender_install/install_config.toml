@@ -2,9 +2,18 @@
 # If you are installing addon for the first time, blender portable component
 # is stored in the archive, this step can be skipped or done manually
 blender_unpack = true
+# Overwrite existing
+blender_overwrite = true
 # Path to blender portable archive, if binaries_checksum is active, checksum
 # file is also expected
-blender_packed = "../../binaries/blender-portable.tar.xz"
+blender_packed = "../binaries/blender-portable.tar.xz"
+# Allow only these paths to be manipulated by script, effectively protecting from
+# sudden data removal, always provide this list to avoid any potential data loss
+addon_allowed_paths = [
+ "../blender_portable",
+ "../bin",
+ "bin",
+]
 
 # Blender path for installation - by default locally unpacked blender portable
 # executable will be used, but it can be changed, Blender version will be
@@ -19,10 +28,16 @@ addon_path_user = true
 addon_name = "blender_install"
 # check checksums of binaries when installing
 binaries_checksum = true
+
 # Point where to link/install addon, by default it's installed to the user's
 # default addons folder, can be autodetected
 # addon_path = "~/.config/blender/3.4/scripts/addons"
 # addon_path = "../../blender_portable/3.4/scripts/addons"
+
+# Files to include or exclude in case addon is copied
+install_include = "install_include.txt"
+install_exclude = "install_exclude.txt"
+
 # Use custom script to install pip, will be skipped if pip is not provided
 install_pip_script = "install_pip.py"
 # This will install additional Python modules for use with your addon
@@ -54,8 +69,13 @@ use_ignore = true
 use_include = true
 
 # Binaries
+# Provide precompiled binaries folder
+binaries_precompiled_path = "../binaries"
+# Provide binaries path
+binaries_path = "bin"
 # Copy binaries from provided binaries location, or just leave them available
 # to use in Python where they are
 binaries_copy = false
 # Try to compile additional executables to use with plugin
 binaries_compile = false
+

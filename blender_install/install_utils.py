@@ -3,13 +3,14 @@ import os
 import sys
 import shutil
 import platform
-from shutil import ignore_patterns
+from shutil import ignore_patterns, rmtree
 from pathlib import Path
 from install_config import InstallConfig
 from typing import List, Dict, Set, Tuple, Optional, Union
 from subprocess import Popen, PIPE, TimeoutExpired
 from checksum_file import checksum_and_copy
 
+# Get the platform script is running on
 PLATFORM = platform.system()
 
 
@@ -43,6 +44,16 @@ def try_to_install(cfg: InstallConfig):
 
 
 def symlynk_or_copy(cfg: InstallConfig):
+    """Tries to install addon to specified folder. As the fastest and by far best
+    solution tries to symlink the blender_install to addon folder, so upon running
+    Blender it just resolves to this folder with an addon. Otherwise tries to copy
+    contents of this folder to specified addon path.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Object with parsed and verified configuration.
+    """
     cur_folder = cfg.current_folder
     addon_path = cfg.addon_path
 
@@ -58,14 +69,12 @@ def symlynk_or_copy(cfg: InstallConfig):
             chk = addon_path.resolve(True)
 
             # Guarantee two Path objects are compared, not some arbitrary data
-            if Path(chk) == Path(cur_folder):
-                print(
-                    "Symlink points to current folder, no additional "
-                    "actions are needed"
-                )
+            if Path(chk) == Path(cur_folder) and cfg.addon_create_link:
+                print("Symlink points to current folder, nothing will be done")
                 chk_symlink = True
             else:
-                print("Symlink path is incorrect, removing it")
+                print("Either symlink is incorrect, or copy of addon preferred")
+                print("Removing symlink")
                 os.unlink(addon_path)
 
         elif addon_path.is_dir():
@@ -86,76 +95,56 @@ def symlynk_or_copy(cfg: InstallConfig):
 
     if not chk_symlink:
         try:
-            os.symlink(os.path.abspath(cur_folder), os.path.abspath(addon_path), True)
+            if cfg.addon_create_link:
+                os.symlink(
+                    os.path.abspath(cur_folder), os.path.abspath(addon_path), True
+                )
 
-            if all(
-                (
-                    addon_path.is_symlink(),
-                    Path(addon_path.resolve(True)) == Path(cur_folder),
-                )
-            ):
-                # Symlink creation successful - no need to copy
-                print(
-                    "Successfully created symlink, no files will be copied "
-                    "to Blender3D addon folder"
-                )
-                chk_symlink = True
+                if all(
+                    (
+                        addon_path.is_symlink(),
+                        Path(addon_path.resolve(True)) == Path(cur_folder),
+                    )
+                ):
+                    # Symlink creation successful - no need to copy
+                    print(
+                        "Successfully created symlink, no files will be copied "
+                        "to Blender3D addon folder"
+                    )
+                    chk_symlink = True
+            else:
+                raise Exception("Preferred to copy the addon, falling back to copy")
 
         except Exception as e:
-            print(f"Symlink creation failed - trying to copy addon files instead:\n{e}")
+            print(f"Trying to copy addon files because:\n{e}")
             try:
-                shutil.copytree(cfg.current_folder, cfg.addon_path)
+                # Copy current folder to the release folder
+                ignore_files: List[str] = []
+
+                if cfg.install_exclude is not None:
+                    with open(cfg.install_exclude, "rt") as ii:
+                        ignore_files = [
+                            li.replace("/", "") for li in ii.read().splitlines()
+                        ]
+
+                shutil.copytree(
+                    os.getcwd(),
+                    addon_path,
+                    ignore=ignore_patterns(*(pat for pat in ignore_files))
+                    if len(ignore_files) > 0
+                    else None,
+                )
+
             except Exception as e:
                 print(f"All installation methods exausted. Tree copy failed: {e}")
 
 
 def manage_binaries(cfg: InstallConfig):
     if cfg.binaries_compile:
-        if kwargs["compile"]:
-            print("Compilation of binaries is not yet supported\n")
-        else:
-            print("Copying binaries in repository workfolder\n")
-            copy_precompiled(cur_folder)
-
-    # Other steps are not needed if symlink was created
-    if chk_symlink:
-        print("Finished repo setup\n")
-        return
-
-    # Copy current folder to the release folder
-    ignore_files: List[str] = []
-
-    with open(Path(cur_folder, "install_exclude.txt"), "rt") as ii:
-        ignore_files = [li.replace("/", "") for li in ii.read().splitlines()]
-
-    path_addon = shutil.copytree(
-        os.getcwd(),
-        addon_path,
-        ignore=ignore_patterns(*(pat for pat in ignore_files)),
-    )
-
-    if isinstance(path_addon, Path):
-        print(
-            "Copied to: {}, resulting size is: {}".format(
-                path_addon, shutil.disk_usage(path_addon)
-            )
-        )
+        print("Compilation of binaries is not yet supported\n")
     else:
-        print(f"Copytree returned error: {path_addon}")
-        sys.exit(2)
-
-    if "archive" in kw:
-        if kwargs["archive"]:
-            os.chdir(tgt_folder)
-            cur_folder = os.getcwd()  # Update the variable after the cd
-            print(f"Changed working directory to: {os.getcwd()}")
-            shutil.make_archive(
-                addon_path.parts[-1], "zip", tgt_folder, addon_path.parts[-1]
-            )
-
-            print("Release zip is ready")
-        else:
-            print("Release is shipped")
+        print("Copying binaries in repository workfolder\n")
+        copy_precompiled(cfg.binaries_path)
 
 
 def copy_precompiled(current_folder: Path):
@@ -211,8 +200,7 @@ def copy_precompiled(current_folder: Path):
 def run_popen(
     command: List[str], wd=os.getcwd(), stdin=PIPE, stdout=PIPE, stderr=PIPE
 ) -> Popen:
-    """
-    Runs the Popen with specified command and working directory.
+    """Runs the Popen with specified command and working directory.
 
     Parameters:
     -----------
@@ -245,11 +233,30 @@ def run_popen(
 def comm_popen(
     proc: Popen, error_message: Optional[str], t=360, print_std=True
 ) -> Tuple[Optional[int], str, str, Optional[Exception]]:
-    """
-    Similar to communicate_proc, but also tries to extract return code from
+    """Similar to communicate_proc, but also tries to extract return code from
     executed app.
 
-    :returns: exit code, stdout, stderr, error message.
+    Parameters:
+    -----------
+    proc : Popen
+        Instance of Popen process.
+    error_message : Optional[str]
+        String to print in case of process failure/timeout.
+    t : float
+        Timeout.
+    print_std : bool
+        Option to print all the data transferred during the run.
+
+    Returns:
+    --------
+    exit_code : Optional[int]
+        Exit code of the process.
+    stdout : str
+        Stdout of the process.
+    stderr : str
+        Stderr of the process.
+    exception : Optional[Exception]
+        Exception that occured during the run.
     """
     exit_code = None
     outs = ("", "")
@@ -296,10 +303,49 @@ def run_process(
     wd=os.getcwd(),
     print_std=True,
 ) -> Tuple[Optional[int], str, str, Optional[Exception]]:
-    """
-    Wraps run_proc and communicate_proc_exit_code functions into one.
+    """Wraps run_proc and communicate_proc_exit_code functions into one.
     Runs Popen, captures logging output and waits for execution for designated
     timeout, if execution is not finished, prints out error message. Can
     optionally print out stdout and stderr.
+
+    Parameters:
+    -----------
+    command : List[str]
+        Terminal command to run.
+    error_message : Optional[str]
+        String to print in case of process failure/timeout.
+    t : float
+        Timeout.
+    wd : str
+        Working directory to start process in.
+    print_std : bool
+        Option to print all the data transferred during the run.
+
+    Returns:
+    --------
+    exit_code : Optional[int]
+        Exit code of the process.
+    stdout : str
+        Stdout of the process.
+    stderr : str
+        Stderr of the process.
+    exception : Optional[Exception]
+        Exception that occured during the run.
     """
     return comm_popen(run_popen(command, wd), error_message, timeout, print_std)
+
+
+def rmtree_protected(target: Path, allowed_paths: Set[Path]):
+    """Removes directory in case it's in allowed set of directories.
+
+    Parameters:
+    -----------
+    target : Path
+        Directory to remove.
+    allowed_paths : Set[Path]
+        Set of Paths with allowed operations on them.
+    """
+    if target.exists():
+        if target.is_dir():
+            if len(set(target.parents).intersection(allowed_paths)) > 0:
+                rmtree(target, True)
