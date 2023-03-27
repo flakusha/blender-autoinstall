@@ -40,6 +40,11 @@ def checksum_file(checksum_file: Path) -> bool:
     -----------
     checksum_file : Path
         Path to file that has hashfile.
+
+    Returns:
+    --------
+    bool
+        Checksum is successful.
     """
     checksum_fstr = str(checksum_file)
     # Dicts of (platform) -> (type of sum) -> command

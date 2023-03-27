@@ -10,10 +10,12 @@ class InstallConfig:
     for comments and details on implementation along with default values.
     """
 
+    blender_packed: Optional[Path]
+    blender_unpack: bool
     blender_path: Path
     blender_python_dir: Path
     blender_python_version: str
-    blender_version: Optional[str]
+    blender_version: str
     addon_path_autodetect: bool
     addon_path_user: bool
     addon_name: str
@@ -44,22 +46,25 @@ class InstallConfig:
         self.addon_path_autodetect = cfg.get("addon_path_autodetect", True)
         self.addon_path_user = cfg.get("addon_path_user", True)
         self.current_folder = Path(os.getcwd()).resolve(True)
+        self.blender_unpack = cfg.get("blender_unpack", True)
+        self.blender_packed = cfg.get("blender_packed")
 
-        self.blender_path = Path(
-            cfg.get(
-                "blender_path",
-                Path(
-                    Path(__file__).resolve(True),
-                    "..",
-                    "..",
-                    "blender_portable",
-                    "blender",
-                ).resolve(True),
-            )
-        ).resolve(True)
+        self.blender_path = self.get_blender_path(cfg)
 
         if not executable_exists(self.blender_path):
-            raise OSError("Provided blender_path doesn't exist or is not executable")
+            if self.blender_unpack:
+                if self.blender_packed is not None:
+                    blender_packed = self.resolve_to_path(self.blender_packed)
+
+                    if blender_packed.exists() and blender_packed.is_file():
+                        self.blender_packed = blender_packed
+
+                        print(
+                            "blender_path is not found, but portable archive is found"
+                        )
+
+            else:
+                raise OSError("Provided blender_path is not found or not executable")
 
         self.blender_version = self.get_blender_version(self.blender_path)
         self.blender_python_dir = self.get_blender_python_dir()
@@ -75,7 +80,7 @@ class InstallConfig:
 
         # Get custom scripts for installation of additional components
         install_pip_script = cfg.get("install_pip_script")
-        pip_modules = cfg.get("pip_modules", [])
+        self.pip_modules = cfg.get("pip_modules", [])
         install_activate_script = cfg.get("install_activate_script")
         self.activate_addons = cfg.get("activate_addons", [])
         install_custom_script = cfg.get("install_custom_script")
@@ -92,6 +97,20 @@ class InstallConfig:
                 setattr(self, field, self.get_script_file(cfg, script_name))
             else:
                 setattr(self, field, None)
+
+    def get_blender_path(self, cfg: Dict[str, Any]) -> Path:
+        return Path(
+            cfg.get(
+                "blender_path",
+                Path(
+                    Path(__file__).resolve(True),
+                    "..",
+                    "..",
+                    "blender_portable",
+                    "blender",
+                ).resolve(True),
+            )
+        ).resolve(True)
 
     def get_addon_path(self, cfg: Dict[str, Any]) -> Path:
         default_path: Path
@@ -153,9 +172,9 @@ class InstallConfig:
 
         if ec is not None:
             if ec != 0:
-                raise Exception(f"{ec}")
+                raise Exception(f"Failed to get Blender version: {ec}\n{se}\n{er}")
         else:
-            raise Exception(f"{ec}")
+            raise Exception(f"Failed to get Blender version: {ec}\n{se}\n{er}")
 
         # Get "Blender x.x.x" and then convert to "x.x" (major version)
         ver = so[1].split("\n\t")[1].split()[1].split(".")[0:2]
@@ -241,11 +260,14 @@ class InstallConfig:
 
         files = os.listdir(str(python_bin_path))
         ver_found = False
+        ver = ""
 
         for file in files:
             if file.startswith("python"):
                 ver_found = True
-                return file.removeprefix("python")
+                ver = file.removeprefix("python")
 
         if not ver_found:
             raise Exception("Python version is not found")
+
+        return ver

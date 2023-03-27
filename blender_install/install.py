@@ -1,4 +1,6 @@
 import argparse
+from shutil import rmtree
+from pprint import pprint
 from pathlib import Path
 from typing import Tuple, Set
 
@@ -15,6 +17,58 @@ from install_utils import (
     PLATFORM,
 )
 from install_config import InstallConfig
+from checksum_file import checksum_file
+
+
+def unpack_portable_blender(cfg: InstallConfig):
+    """Depending on the platform, archive with portable blender will be extracted.
+    If binaries_checksum is active in cfg, archive will be checked before extraction.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Parsed and validated configuration file object.
+    """
+    if not cfg.blender_unpack:
+        print("Portable unpaking is skipped")
+        return
+
+    source = cfg.blender_packed
+    target = cfg.blender_path.parent
+    bin_chk = cfg.binaries_checksum
+
+    if source is not None:
+        if not source.exists() or not source.is_file():
+            print("Archive with portable is not found")
+            return
+
+        if bin_chk:
+            if not checksum_file(source):
+                print("Archive is damaged or checksum is not provided")
+                return
+
+        if source.suffix in {".xz", ".gz", "bz2"}:
+            import tarfile
+
+            with tarfile.open(str(source)) as f:
+                try:
+                    f.extractall(str(target))
+                except Exception as e:
+                    print(f"Failed to extract: {e}")
+
+        elif source.suffix in {
+            ".zip",
+        }:
+            import zipfile
+
+            with zipfile.ZipFile(str(source)) as f:
+                try:
+                    f.extractall(str(target))
+                except Exception as e:
+                    print(f"Failed to extract: {e}")
+
+    else:
+        print("Unpacking requested, but no blender_packed archive provided")
 
 
 def install_addon(cfg: InstallConfig):
@@ -51,12 +105,10 @@ def install_pip(cfg: InstallConfig) -> bool:
     Returns:
     --------
     bool
-        PIP activation is successfull.
+        PIP activation is successful.
     """
     if cfg.install_pip_script is None:
         print("No PIP install script provided, skipping")
-
-    print("Trying to install PIP")
 
     cmd = [
         str(cfg.blender_path),
@@ -69,6 +121,7 @@ def install_pip(cfg: InstallConfig) -> bool:
         if len(cfg.pip_modules) > 0:
             cmd.extend(["--", "-m", ",".join(m for m in cfg.pip_modules)])
 
+    print("Trying to install PIP")
     ec, so, se, er = run_process(cmd, "Failed to install pip", 30, print_std=False)
 
     return ec == 0
@@ -168,7 +221,8 @@ if __name__ == "__main__":
 
     cfg = InstallConfig(Path(args.config).resolve(True))
 
-    installed = None
+    print("Validated config:")
+    pprint(vars(cfg))
 
     if PLATFORM in ("Linux", "Darwin", "Windows"):
         print(f"Installing plugin for platform: {PLATFORM}")

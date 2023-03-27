@@ -2,7 +2,7 @@
 # Status codes:
 # 0 - everything is ok
 # 1 - blender python script failed
-# 2 - archive unpacking is not successfull
+# 2 - archive unpacking is not successful
 
 # Get data from git
 echo -e 'Install script:\n- pulls binaries from LFS\n'\

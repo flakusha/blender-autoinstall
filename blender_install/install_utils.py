@@ -94,7 +94,7 @@ def symlynk_or_copy(cfg: InstallConfig):
                     Path(addon_path.resolve(True)) == Path(cur_folder),
                 )
             ):
-                # Symlink creation successfull - no need to copy
+                # Symlink creation successful - no need to copy
                 print(
                     "Successfully created symlink, no files will be copied "
                     "to Blender3D addon folder"
@@ -173,7 +173,9 @@ def copy_precompiled(current_folder: Path):
     # Precompiled binary Python modules are pyd
     bin_ext: Dict[str, Set[str]] = {
         "Linux": {"", "so", "d"},
-        "Darwin": {"app"},
+        "Darwin": {
+            "app",
+        },
         "Windows": {"exe", "dll"},
         "All": {
             "pyd",
@@ -236,7 +238,7 @@ def run_popen(
         stdin=stdin,
         stdout=stdout,
         stderr=stderr,
-        encoding="utf8",
+        encoding="utf8" if PLATFORM in {"Linux", "Darwin"} else os.device_encoding(0),
     )
 
 

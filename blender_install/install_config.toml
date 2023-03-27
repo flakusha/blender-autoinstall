@@ -1,4 +1,11 @@
 # Blender installer settings
+# If you are installing addon for the first time, blender portable component
+# is stored in the archive, this step can be skipped or done manually
+blender_unpack = true
+# Path to blender portable archive, if binaries_checksum is active, checksum
+# file is also expected
+blender_packed = "../../binaries/blender-portable.tar.xz"
+
 # Blender path for installation - by default locally unpacked blender portable
 # executable will be used, but it can be changed, Blender version will be
 # captured using this executable
