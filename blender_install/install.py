@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pprint import pprint
 from pathlib import Path
 from typing import Tuple, Set
@@ -233,13 +234,13 @@ if __name__ == "__main__":
 
         print("Trying to activate addons")
         if not install_pip(cfg):
-            exit(1)
+            sys.exit(1)
 
         if not activate_addons(cfg):
-            exit(1)
+            sys.exit(1)
 
         if not run_custom_script(cfg):
-            exit(1)
+            sys.exit(1)
 
     else:
         print(f"Installation on this OS({PLATFORM}) is not supported.")

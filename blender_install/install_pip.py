@@ -98,19 +98,26 @@ if __name__ == "__main__":
     ec, so, se, er = install_pip()
 
     argv = sys.argv
-    argv = argv[argv.index("--") + 1 :]
+
+    if "--" in argv:
+        argv = argv[argv.index("--") + 1 :]
+    else:
+        # No additional arguments provided, exiting without error
+        sys.exit()
+
+    pip_modules: List[str] = []
 
     # Extract comma-separated python modules
     if len(argv) > 0:
         if "-m" in argv:
             idxm = argv.index("-m")
-            pip_modules: List[str] = argv[argv.index("-m") + 1].split(",")
+            pip_modules = argv[argv.index("-m") + 1].split(",")
             pip_modules = [m.strip() for m in pip_modules]
 
     if ec is not None:
         if ec == 0:
             if len(pip_modules) > 0:
                 if install_pip_modules(pip_modules):
-                    exit(0)
+                    sys.exit()
 
-    exit(1)
+    sys.exit(1)

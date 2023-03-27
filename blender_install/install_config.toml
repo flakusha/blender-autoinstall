@@ -50,7 +50,8 @@ install_activate_script = "install_activate.py"
 # Addon activation
 # Activate listed addons by their names
 activate_addons = [
- "F2",
+ "blender_install",
+ "f2",
 ]
 
 # Use custom script to implement required functionality
