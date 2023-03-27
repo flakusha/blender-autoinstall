@@ -1,13 +1,11 @@
-import argparse
 import os
-import sys
 import shutil
 import platform
 from shutil import ignore_patterns, rmtree
 from pathlib import Path
 from install_config import InstallConfig
 from typing import List, Dict, Set, Tuple, Optional, Union
-from subprocess import Popen, PIPE, TimeoutExpired
+from subprocess import Popen, PIPE
 from checksum_file import checksum_and_copy
 
 # Get the platform script is running on
@@ -94,65 +92,90 @@ def symlynk_or_copy(cfg: InstallConfig):
             raise OSError(f"Addon path is not symlink/directory/file")
 
     if not chk_symlink:
-        try:
-            if cfg.addon_create_link:
-                os.symlink(
-                    os.path.abspath(cur_folder), os.path.abspath(addon_path), True
-                )
+        create_symlink_or_copy(cfg)
 
-                if all(
-                    (
-                        addon_path.is_symlink(),
-                        Path(addon_path.resolve(True)) == Path(cur_folder),
-                    )
-                ):
-                    # Symlink creation successful - no need to copy
-                    print(
-                        "Successfully created symlink, no files will be copied "
-                        "to Blender3D addon folder"
-                    )
-                    chk_symlink = True
-            else:
-                raise Exception("Preferred to copy the addon, falling back to copy")
+
+def create_symlink_or_copy(cfg: InstallConfig):
+    """Tries to recreate symlink to addon or copy addon files.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Object with parsed and verified configuration.
+    """
+    cur_folder = cfg.current_folder
+    addon_path = cfg.addon_path
+
+    try:
+        if cfg.addon_create_link:
+            os.symlink(os.path.abspath(cur_folder), os.path.abspath(addon_path), True)
+
+            if all(
+                (
+                    addon_path.is_symlink(),
+                    Path(addon_path.resolve(True)) == Path(cur_folder),
+                )
+            ):
+                # Symlink creation successful - no need to copy
+                print(
+                    "Successfully created symlink, no files will be copied "
+                    "to Blender3D addon folder"
+                )
+                chk_symlink = True
+        else:
+            raise Exception("Preferred to copy the addon, falling back to copy")
+
+    except Exception as e:
+        print(f"Trying to copy addon files because:\n{e}")
+        try:
+            # Copy current folder to the release folder
+            ignore_files: List[str] = []
+
+            if cfg.install_exclude is not None:
+                with open(cfg.install_exclude, "rt") as ii:
+                    ignore_files = [
+                        li.replace("/", "") for li in ii.read().splitlines()
+                    ]
+
+            shutil.copytree(
+                os.getcwd(),
+                addon_path,
+                ignore=ignore_patterns(*(pat for pat in ignore_files))
+                if len(ignore_files) > 0
+                else None,
+            )
 
         except Exception as e:
-            print(f"Trying to copy addon files because:\n{e}")
-            try:
-                # Copy current folder to the release folder
-                ignore_files: List[str] = []
-
-                if cfg.install_exclude is not None:
-                    with open(cfg.install_exclude, "rt") as ii:
-                        ignore_files = [
-                            li.replace("/", "") for li in ii.read().splitlines()
-                        ]
-
-                shutil.copytree(
-                    os.getcwd(),
-                    addon_path,
-                    ignore=ignore_patterns(*(pat for pat in ignore_files))
-                    if len(ignore_files) > 0
-                    else None,
-                )
-
-            except Exception as e:
-                print(f"All installation methods exausted. Tree copy failed: {e}")
+            print(f"All installation methods exausted. Tree copy failed: {e}")
 
 
 def manage_binaries(cfg: InstallConfig):
+    """Copies or compiles binaries - WIP.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Object with parsed and verified configuration.
+    """
     if cfg.binaries_compile:
         print("Compilation of binaries is not yet supported\n")
     else:
         print("Copying binaries in repository workfolder\n")
-        copy_precompiled(cfg.binaries_path)
+        copy_precompiled(cfg)
 
 
-def copy_precompiled(current_folder: Path):
+def copy_precompiled(cfg: InstallConfig):
     """
     Copies precompiled binaries to bin/ folder.
+
+    Parameters:
+    -----------
+    cfg : InstallConfig
+        Object with parsed and verified configuration.
     """
-    dir_bin_precompiled = Path(current_folder, "bin_precompiled")
-    dir_target = Path(current_folder, "bin")
+    dir_bin_precompiled = cfg.binaries_precompiled_path
+    dir_target = cfg.binaries_path
+
     os.makedirs(dir_target, exist_ok=True)
 
     # Linux uses either no extension or AppImage or other ways to publish apps
@@ -191,9 +214,7 @@ def copy_precompiled(current_folder: Path):
                 else:
                     print(f"{Path(rt, fl)} is not file or dir, not copying")
 
-        # Only need the highest one, I know there is listdir, but I have
-        # already finished this version
-        print()
+        # Only one level is copied at the moment
         break
 
 

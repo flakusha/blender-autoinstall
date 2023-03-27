@@ -52,6 +52,7 @@ install_activate_script = "install_activate.py"
 activate_addons = [
  "F2",
 ]
+
 # Use custom script to implement required functionality
 # install_custom_script = "install_custom.py"
 # for the custom script it's harder to predict the timeout, so set it here (seconds)
