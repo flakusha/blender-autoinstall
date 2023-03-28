@@ -153,45 +153,56 @@ class InstallConfig:
         ).resolve(True)
 
     def get_addon_path(self, cfg: Dict[str, Any]) -> Path:
-        default_path: Path
+        default_path: Optional[Path]
+        path: Optional[Path]
 
-        if PLATFORM in {"Linux", "Darwin"}:
-            if self.addon_path_user:
-                default_path = Path(
-                    Path.home(),
-                    ".config",
-                    "blender",
-                    self.blender_version,
-                    "scripts",
-                    "addons",
-                    self.addon_name,
-                )
-            else:
-                default_path = Path(
-                    self.blender_path,
-                    self.blender_version,
-                    "scripts",
-                    "addons",
-                    self.addon_name,
-                )
-
-        elif PLATFORM == "Windows":
-            default_path = Path(
-                Path.home(),
-                "AppData",
-                "Roaming",
-                "Blender Foundation",
-                "Blender",
-                self.blender_version,
-                "scripts",
-                "addons",
-                self.addon_name,
-            )
-        else:
-            raise Exception(f"Platform: {PLATFORM} is not supported")
-
-        # Detect addon path automatically if nothing is set
         if self.addon_path_autodetect:
+            if PLATFORM in {"Linux", "Darwin"}:
+                if self.addon_path_user:
+                    default_path = Path(
+                        Path.home(),
+                        ".config",
+                        "blender",
+                        self.blender_version,
+                        "scripts",
+                        "addons",
+                        self.addon_name,
+                    )
+                else:
+                    default_path = Path(
+                        self.blender_path,
+                        self.blender_version,
+                        "scripts",
+                        "addons",
+                        self.addon_name,
+                    )
+
+            elif PLATFORM == "Windows":
+                if self.addon_path_user:
+                    default_path = Path(
+                        Path.home(),
+                        "AppData",
+                        "Roaming",
+                        "Blender Foundation",
+                        "Blender",
+                        self.blender_version,
+                        "scripts",
+                        "addons",
+                        self.addon_name,
+                    )
+                else:
+                    default_path = Path(
+                        self.blender_path,
+                        self.blender_version,
+                        "scripts",
+                        "addons",
+                        self.addon_name,
+                    )
+
+            else:
+                raise Exception(f"Platform: {PLATFORM} is not supported")
+
+            # Detect addon path automatically if nothing is set
             path = self.resolve_to_path(default_path)
 
         else:
