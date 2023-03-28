@@ -204,6 +204,8 @@ class InstallConfig:
 
             # Detect addon path automatically if nothing is set
             path = self.resolve_to_path(default_path)
+            print(f"Defaulted addon path:\t{default_path}")
+            print(f"Autodetected addon path:\t{path}")
 
         else:
             path = self.resolve_to_path(cfg.get("addon_path"))
@@ -216,13 +218,17 @@ class InstallConfig:
     def resolve_to_path(self, path: Optional[Union[str, Path]]) -> Optional[Path]:
         if path is None:
             return None
+
         elif isinstance(path, str):
             if path.startswith("~/"):
-                return Path(Path.home(), path[2::]).resolve()
+                p = Path(Path.home(), path[1::])
+                return p
             else:
-                return Path(path).resolve()
+                return Path(path)
         else:
-            return path.resolve()
+            return path
+
+        return None
 
     def get_blender_version(self, path: Path) -> str:
         """Runs provided Blender executable and gets version."""
