@@ -30,9 +30,7 @@ def install_addon(cfg: InstallConfig):
     """
     path_current = cfg.current_folder
     addon_name = cfg.addon_name
-
-    # Now it's possible to select correct folder and config
-    addon_path: Path = cfg.addon_path
+    addon_path = cfg.addon_path
 
     if addon_path.parts[-1] != addon_name:
         addon_path = Path(addon_path, addon_name)

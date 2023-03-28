@@ -6,6 +6,7 @@ from install_config import InstallConfig, PLATFORM
 from typing import List, Dict, Set, Tuple, Optional
 from subprocess import Popen, PIPE
 from checksum_file import checksum_and_copy
+from install_proc_utils import rmtree_protected
 
 
 def try_to_install(cfg: InstallConfig):
@@ -34,6 +35,9 @@ def symlynk_or_copy(cfg: InstallConfig):
     cur_folder = cfg.current_folder
     addon_path = cfg.addon_path
 
+    if cur_folder == addon_path:
+        raise Exception("Current folder and addon folder are the same, aborting")
+
     # Check that symlink already exists or user is able to create it, thus
     # any kind of *heavy* file copying is not needed
     chk_symlink = False
@@ -58,7 +62,7 @@ def symlynk_or_copy(cfg: InstallConfig):
             print("Target folder is folder")
             if not addon_path.is_symlink():
                 print(f"Removing previous folder: {addon_path}")
-                shutil.rmtree(addon_path)
+                rmtree_protected(addon_path, cfg.addon_allowed_paths)
             elif addon_path.is_symlink():
                 print(f"Removing previous folder symlink: {addon_path}")
                 os.unlink(addon_path)

@@ -154,6 +154,7 @@ class InstallConfig:
 
     def get_addon_path(self, cfg: Dict[str, Any]) -> Path:
         default_path: Path
+
         if PLATFORM in {"Linux", "Darwin"}:
             if self.addon_path_user:
                 default_path = Path(
@@ -191,12 +192,20 @@ class InstallConfig:
 
         # Detect addon path automatically if nothing is set
         if self.addon_path_autodetect:
-            return self.resolve_to_path(default_path)
-        else:
-            return self.resolve_to_path(cfg.get("addon_path", default_path))
+            path = self.resolve_to_path(default_path)
 
-    def resolve_to_path(self, path: Union[str, Path]) -> Path:
-        if isinstance(path, str):
+        else:
+            path = self.resolve_to_path(cfg.get("addon_path"))
+
+        if path is not None:
+            return path
+        else:
+            raise OSError("Incorrect addon path")
+
+    def resolve_to_path(self, path: Optional[Union[str, Path]]) -> Optional[Path]:
+        if path is None:
+            return None
+        elif isinstance(path, str):
             if path.startswith("~/"):
                 return Path(Path.home(), path[2::]).resolve()
             else:
