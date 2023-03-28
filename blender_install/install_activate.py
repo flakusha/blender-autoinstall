@@ -9,7 +9,7 @@ dircur = os.path.dirname(__file__)
 if dircur not in sys.path:
     sys.path.append(os.path.dirname(__file__))
 
-from install_utils import run_process
+from install_proc_utils import run_process
 
 python_dir = "python{}.{}".format(sys.version_info.major, sys.version_info.minor)
 

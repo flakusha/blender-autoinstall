@@ -2,7 +2,6 @@ import argparse
 import sys
 from pprint import pprint
 from pathlib import Path
-from typing import Tuple, Set
 
 # Make it possible to import modules **in** blender environment
 # dircur = os.path.dirname(__file__)
@@ -12,67 +11,12 @@ from typing import Tuple, Set
 # Now import is available
 from install_utils import (
     try_to_install,
-    copy_precompiled,
-    run_process,
-    rmtree_protected,
-    PLATFORM,
 )
+
 from install_config import InstallConfig
 from checksum_file import checksum_file
-
-
-def unpack_portable_blender(cfg: InstallConfig):
-    """Depending on the platform, archive with portable blender will be extracted.
-    If binaries_checksum is active in cfg, archive will be checked before extraction.
-
-    Parameters:
-    -----------
-    cfg : InstallConfig
-        Parsed and validated configuration file object.
-    """
-    if not cfg.blender_unpack:
-        print("Portable unpaking is skipped")
-        return
-
-    source = cfg.blender_packed
-    target = cfg.blender_path.parent
-    bin_chk = cfg.binaries_checksum
-
-    if source is not None:
-        if not source.exists() or not source.is_file():
-            print("Archive with portable is not found")
-            return
-
-        if bin_chk:
-            if not checksum_file(source):
-                print("Archive is damaged or checksum is not provided")
-                return
-
-        if cfg.blender_overwrite:
-            rmtree_protected(target, cfg.addon_allowed_paths)
-
-        if source.suffix in {".xz", ".gz", "bz2"}:
-            import tarfile
-
-            with tarfile.open(str(source)) as f:
-                try:
-                    f.extractall(str(target))
-                except Exception as e:
-                    print(f"Failed to extract: {e}")
-
-        elif source.suffix in {
-            ".zip",
-        }:
-            import zipfile
-
-            with zipfile.ZipFile(str(source)) as f:
-                try:
-                    f.extractall(str(target))
-                except Exception as e:
-                    print(f"Failed to extract: {e}")
-
-    else:
-        print("Unpacking requested, but no blender_packed archive provided")
+from install_platform import PLATFORM
+from install_proc_utils import run_process
 
 
 def install_addon(cfg: InstallConfig):

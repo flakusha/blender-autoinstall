@@ -18,7 +18,7 @@ addon_allowed_paths = [
 # Blender path for installation - by default locally unpacked blender portable
 # executable will be used, but it can be changed, Blender version will be
 # captured using this executable
-blender_path = "../../blender_portable/blender"
+blender_path = "../blender_portable/blender"
 # Autodetect addon path using blender executable, defaults to user config folder
 addon_path_autodetect = true
 # If autodetect is active, use either user folder or portable blender folder.

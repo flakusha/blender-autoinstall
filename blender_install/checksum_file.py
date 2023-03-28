@@ -2,7 +2,8 @@ import os
 import shutil
 from pathlib import Path
 from typing import Optional, List
-from install_utils import run_process, PLATFORM
+from install_proc_utils import run_process
+from install_platform import PLATFORM
 
 CHK_FMTS = {"md5", "sha1", "sha256", "sha384", "sha512"}
 
@@ -46,38 +47,32 @@ def checksum_file(checksum_file: Path) -> bool:
     bool
         Checksum is successful.
     """
-    checksum_fstr = str(checksum_file)
     # Dicts of (platform) -> (type of sum) -> command
     supported_chk_algos_win = {
         "md5": [
             "certutil",
-            "-hashfile",
-            checksum_fstr,
             "MD5",
+            "-hashfile",
         ],
         "sha1": [
             "certutil",
-            "-hashfile",
-            checksum_fstr,
             "SHA1",
+            "-hashfile",
         ],
         "sha256": [
             "certutil",
-            "-hashfile",
-            checksum_fstr,
             "SHA256",
+            "-hashfile",
         ],
         "sha384": [
             "certutil",
-            "-hashfile",
-            checksum_fstr,
             "SHA384",
+            "-hashfile",
         ],
         "sha512": [
             "certutil",
-            "-hashfile",
-            checksum_fstr,
             "SHA512",
+            "-hashfile",
         ],
     }
     supported_chk_algos_linux_mac = {
@@ -118,11 +113,28 @@ def checksum_file(checksum_file: Path) -> bool:
 
     command: Optional[List[str]] = None
 
-    if checksum_file.suffixes[-1][1::] in supported_chk_plf[PLATFORM]:
-        command = supported_chk_plf[PLATFORM][checksum_file.suffixes[-1][1::]]
+    checksum_hash_file = None
+    checksum_hash_files = [
+        f
+        for f in os.listdir(str(checksum_file.parent))
+        if all(
+            (
+                f.startswith(checksum_file.name),
+                f.endswith(tuple(supported_chk_plf[PLATFORM].keys())),
+            )
+        )
+    ]
 
-        if PLATFORM in {"Linux", "Darwin"}:
-            command.append(checksum_fstr)
+    if len(checksum_hash_files) > 0:
+        checksum_hash_file = Path(checksum_file.parent, checksum_hash_files[-1])
+    else:
+        print("Could not find any checksum files along provided binary")
+        return False
+
+    command = supported_chk_plf[PLATFORM][checksum_hash_file.suffixes[-1][1::]]
+
+    if PLATFORM in {"Linux", "Darwin"}:
+        command.append(str(checksum_hash_file))
 
     if command is None:
         print(
@@ -144,7 +156,7 @@ def checksum_file(checksum_file: Path) -> bool:
     )
 
     if ec != 0:
-        print(f"Checksum failed with code: {ec} for file: {checksum_fstr}")
+        print(f"Checksum failed with code: {ec} for file: {checksum_file.name}")
         return False
 
     return True

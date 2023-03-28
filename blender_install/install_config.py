@@ -1,8 +1,12 @@
 import os
+import sys
 import toml
+from pprint import pprint
 from pathlib import Path
 from typing import Dict, Set, List, Optional, Union, Any
-from install_utils import executable_exists, run_process, PLATFORM
+from install_platform import PLATFORM
+from install_proc_utils import run_process, executable_exists, rmtree_protected
+from checksum_file import checksum_file
 
 
 class InstallConfig:
@@ -49,7 +53,9 @@ class InstallConfig:
         self.validate_config(cfg)
 
     def validate_config(self, cfg: Dict[str, Any]):
-        """Extracts and validates values from cfg file. Falls back to sane defaults."""
+        """Extracts and validates values from cfg file. Falls back to sane defaults.
+        Unpacks blender executable from the archive if needed.
+        """
         self.addon_name = cfg.get("blender_install", "blender_install")
         self.addon_path_autodetect = cfg.get("addon_path_autodetect", True)
         self.addon_path_user = cfg.get("addon_path_user", True)
@@ -62,6 +68,7 @@ class InstallConfig:
         self.blender_path = self.get_blender_path(cfg)
         self.binaries_precompiled_path = self.get_binaries_precompiled_path(cfg)
         self.binaries_path = self.get_binaries_path(cfg)
+        self.binaries_checksum = cfg.get("binaries_checksum", True)
 
         if not executable_exists(self.blender_path):
             if self.blender_unpack:
@@ -74,6 +81,12 @@ class InstallConfig:
                         print(
                             "blender_path is not found, but portable archive is found"
                         )
+
+                        unpack_portable_blender(self)
+
+                        if not executable_exists(self.blender_path):
+                            print("Executable not found")
+                            raise OSError("Provided blender_path is wrong")
 
             else:
                 raise OSError("Provided blender_path is not found or not executable")
@@ -91,24 +104,15 @@ class InstallConfig:
         self.binaries_compile = cfg.get("binaries_compile", False)
 
         # Get custom scripts for installation of additional components
-        install_pip_script = cfg.get("install_pip_script")
+        self.install_pip_script = self.get_script_file(cfg, "install_pip_script")
         self.pip_modules = cfg.get("pip_modules", [])
-        install_activate_script = cfg.get("install_activate_script")
+        self.install_activate_script = self.get_script_file(
+            cfg, "install_activate_script"
+        )
         self.activate_addons = cfg.get("activate_addons", [])
-        install_custom_script = cfg.get("install_custom_script")
+        self.install_custom_script = self.get_script_file(cfg, "install_custom_script")
         self.install_custom_timeout = cfg.get("install_custom_script", 30.0)
         self.install_custom_args = cfg.get("install_custom_args", [])
-
-        # No script provided == step skipped
-        for field, script_name in {
-            "install_pip_script": install_pip_script,
-            "install_activate_script": install_activate_script,
-            "install_custom_script": install_custom_script,
-        }.items():
-            if script_name is not None:
-                setattr(self, field, self.get_script_file(cfg, script_name))
-            else:
-                setattr(self, field, None)
 
         self.install_include = cfg.get("install_include")
         self.install_exclude = cfg.get("install_exclude")
@@ -130,7 +134,7 @@ class InstallConfig:
                     "blender",
                 ),
             )
-        ).resolve(True)
+        ).resolve()
 
     def get_binaries_precompiled_path(self, cfg: Dict[str, Any]) -> Path:
         return Path(
@@ -138,7 +142,7 @@ class InstallConfig:
                 "binaries_precompiled_path",
                 Path(Path(__file__).resolve(True), "..", "binaries"),
             ),
-        )
+        ).resolve()
 
     def get_binaries_path(self, cfg: Dict[str, Any]) -> Path:
         return Path(
@@ -194,11 +198,11 @@ class InstallConfig:
     def resolve_to_path(self, path: Union[str, Path]) -> Path:
         if isinstance(path, str):
             if path.startswith("~/"):
-                return Path(Path.home(), path[2::]).resolve(True)
+                return Path(Path.home(), path[2::]).resolve()
             else:
-                return Path(path).resolve(True)
+                return Path(path).resolve()
         else:
-            return path.resolve(True)
+            return path.resolve()
 
     def get_blender_version(self, path: Path) -> str:
         """Runs provided Blender executable and gets version."""
@@ -213,10 +217,10 @@ class InstallConfig:
             raise Exception(f"Failed to get Blender version: {ec}\n{se}\n{er}")
 
         # Get "Blender x.x.x" and then convert to "x.x" (major version)
-        ver = so[1].split("\n\t")[1].split()[1].split(".")[0:2]
+        ver = so.split("\n\t")[0].split()[1].split(".")[0:2]
         return ".".join(ver)
 
-    def get_script_file(self, cfg: Dict[str, Any], script_name: str) -> Optional[Path]:
+    def get_script_file(self, cfg: Dict[str, Any], script_name) -> Optional[Path]:
         """Checks that custom install Python script is provided.
 
         Parameters:
@@ -307,3 +311,64 @@ class InstallConfig:
             raise Exception("Python version is not found")
 
         return ver
+
+
+def unpack_portable_blender(cfg: InstallConfig):
+    """Depending on the platform, archive with portable blender will be extracted.
+    If binaries_checksum is active in cfg, archive will be checked before extraction.
+    """
+    if not cfg.blender_unpack:
+        print("Portable unpaking is skipped")
+        return
+
+    source = cfg.blender_packed
+    target = cfg.blender_path.parent
+    bin_chk = cfg.binaries_checksum
+
+    if source is not None:
+        if not source.exists() or not source.is_file():
+            print("Archive with portable is not found")
+            return
+
+        if bin_chk:
+            if not checksum_file(source):
+                print("Archive is damaged or checksum is not provided")
+                return
+
+        if cfg.blender_overwrite:
+            rmtree_protected(target, cfg.addon_allowed_paths)
+
+        if source.suffix in {".xz", ".gz", "bz2"}:
+            import tarfile
+
+            with tarfile.open(str(source)) as f:
+                try:
+                    ms = f.getmembers()
+                    m0 = len(ms[0].path)
+
+                    for m in ms:
+                        m.path = m.path[m0 + 1 : :]
+
+                    pprint(ms)
+
+                    f.extractall(str(target), ms)
+                    sys.exit(1)
+
+                except Exception as e:
+                    print(f"Failed to extract: {e}")
+
+        elif source.suffix in {
+            ".zip",
+        }:
+            import zipfile
+
+            with zipfile.ZipFile(str(source)) as f:
+                try:
+                    f.extractall(str(target), f.filelist[1::])
+                except Exception as e:
+                    print(f"Failed to extract: {e}")
+
+        print("Portable Blender extracted")
+
+    else:
+        print("Unpacking requested, but no blender_packed archive provided")
