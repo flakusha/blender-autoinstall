@@ -358,10 +358,7 @@ def unpack_portable_blender(cfg: InstallConfig):
                     for m in ms:
                         m.path = m.path[m0 + 1 : :]
 
-                    pprint(ms)
-
                     f.extractall(str(target), ms)
-                    sys.exit(1)
 
                 except Exception as e:
                     print(f"Failed to extract: {e}")
