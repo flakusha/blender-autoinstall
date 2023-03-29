@@ -1,6 +1,7 @@
 import os
 import sys
 import bpy
+import argparse
 import addon_utils
 from typing import List
 
@@ -144,8 +145,6 @@ def setup_compute_devices():
 
 
 if __name__ == "__main__":
-    setup_compute_devices()
-
     argv = sys.argv
 
     if "--" in argv:
@@ -154,12 +153,34 @@ if __name__ == "__main__":
         # No additional arguments provided, exiting without error
         sys.exit()
 
+    parser = argparse.ArgumentParser(
+        description="Compute and addons activation script",
+        add_help=True,
+    )
+    parser.add_argument(
+        "-g",
+        "--graphics",
+        action="store_true",
+        help="Configure graphics/compute devices",
+    )
+    parser.add_argument(
+        "-a",
+        "--addons",
+        type=str,
+        help="Comma-separated list of addons to activate",
+    )
+
+    args = parser.parse_args(argv)
+
+    if "graphics" in args:
+        if args.graphics:
+            setup_compute_devices()
+
+    addons: List[str] = []
     # Extract comma-separated addon names
-    if len(argv) > 0:
-        if "-a" in argv:
-            idxm = argv.index("-a")
-            addons: List[str] = argv[argv.index("-a") + 1].split(",")
-            addons = [a.strip() for a in addons]
+    if "addons" in args:
+        addons = args.addons.split(",")
+        addons = [a.strip() for a in addons]
 
     if len(addons) > 0:
         activate_addons(addons)

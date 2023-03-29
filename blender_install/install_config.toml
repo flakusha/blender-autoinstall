@@ -81,3 +81,7 @@ binaries_copy = false
 # Try to compile additional executables to use with plugin
 binaries_compile = false
 
+# Setup compute devices
+# If compute devices are visible to Blender, they will be set up automatically,
+# otherwise skip this step
+setup_compute_devices = true

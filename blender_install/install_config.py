@@ -48,6 +48,8 @@ class InstallConfig:
     install_include: Optional[Path]
     install_exclude: Optional[Path]
 
+    setup_compute_devices: bool
+
     def __init__(self, cfg_file: Path):
         cfg: Dict[str, Any] = toml.load(cfg_file)
         self.validate_config(cfg)
@@ -73,11 +75,7 @@ class InstallConfig:
         if not executable_exists(self.blender_path):
             if self.blender_unpack:
                 if self.blender_packed is not None:
-                    blender_packed = self.resolve_to_path(self.blender_packed)
-
-                    if blender_packed.exists() and blender_packed.is_file():
-                        self.blender_packed = blender_packed
-
+                    if self.blender_packed.exists() and self.blender_packed.is_file():
                         print(
                             "blender_path is not found, but portable archive is found"
                         )
@@ -122,6 +120,8 @@ class InstallConfig:
 
         if self.install_exclude is not None:
             self.install_exclude = Path(self.install_exclude).resolve(True)
+
+        self.setup_compute_devices = cfg.get("setup_compute_devices", True)
 
     def get_blender_path(self, cfg: Dict[str, Any]) -> Path:
         return Path(

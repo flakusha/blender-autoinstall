@@ -2,20 +2,13 @@ import argparse
 import sys
 from pprint import pprint
 from pathlib import Path
+from typing import Optional
 
-# Make it possible to import modules **in** blender environment
-# dircur = os.path.dirname(__file__)
-# if dircur not in sys.path:
-#     sys.path.append(os.path.dirname(__file__))
-
-# Now import is available
 from install_utils import (
     try_to_install,
 )
-
 from install_config import InstallConfig
-from checksum_file import checksum_file
-from install_platform import PLATFORM
+from install_platform import PLATFORM, EC
 from install_proc_utils import run_process
 
 
@@ -40,7 +33,7 @@ def install_addon(cfg: InstallConfig):
     try_to_install(cfg)
 
 
-def install_pip(cfg: InstallConfig) -> bool:
+def install_pip(cfg: InstallConfig) -> Optional[int]:
     """Install pip for instance of Blender3D.
 
     Parameters:
@@ -50,8 +43,8 @@ def install_pip(cfg: InstallConfig) -> bool:
 
     Returns:
     --------
-    bool
-        PIP activation is successful.
+    Optional[int]
+        Propagates run_process exit code.
     """
     if cfg.install_pip_script is None:
         print("No PIP install script provided, skipping")
@@ -68,12 +61,14 @@ def install_pip(cfg: InstallConfig) -> bool:
             cmd.extend(["--", "-m", ",".join(m for m in cfg.pip_modules)])
 
     print("Trying to install PIP")
-    ec, so, se, er = run_process(cmd, "Failed to install pip", 30, print_std=False)
+    ec, so, se, er = run_process(
+        cmd, "Failed to install pip or pip modules", 30, print_std=False
+    )
 
-    return ec == 0
+    return ec
 
 
-def activate_addons(cfg: InstallConfig) -> bool:
+def activate_addons(cfg: InstallConfig) -> Optional[int]:
     """Setup Blender3D for rendering and also activate addons that are found in
     config.activate_addons list.
     Only addon names are supported.
@@ -103,16 +98,27 @@ def activate_addons(cfg: InstallConfig) -> bool:
         str(cfg.install_activate_script),
     ]
 
-    if len(cfg.activate_addons) > 0:
-        cmd.extend(["--", "-a", ",".join(a for a in cfg.activate_addons)])
+    if any(
+        (
+            sc := cfg.setup_compute_devices,
+            ad := (len(cfg.activate_addons) > 0),
+        )
+    ):
+        cmd.append("--")
+
+        if sc:
+            cmd.append("-g")
+
+        if ad:
+            cmd.extend(["-a", ",".join(a for a in cfg.activate_addons)])
 
     print("Activating addons and components")
     ec, so, se, er = run_process(cmd, "Addon activation failed", 60, print_std=False)
 
-    return ec == 0
+    return ec
 
 
-def run_custom_script(cfg: InstallConfig) -> bool:
+def run_custom_script(cfg: InstallConfig) -> Optional[int]:
     """Run custom script which is needed to set up additional components for the addon.
     If no script is provided, this stage will be skipped.
 
@@ -127,7 +133,7 @@ def run_custom_script(cfg: InstallConfig) -> bool:
         Script run successfully.
     """
     if cfg.install_custom_script is None:
-        print("skipping custom script")
+        print("Skipping custom script")
         return True
 
     cmd = [
@@ -146,7 +152,7 @@ def run_custom_script(cfg: InstallConfig) -> bool:
         cmd, "Custom script run failed", cfg.install_custom_timeout, print_std=False
     )
 
-    return ec == 0
+    return ec
 
 
 if __name__ == "__main__":
@@ -161,11 +167,16 @@ if __name__ == "__main__":
         type=Path,
         help="Path to installation config toml",
         default=Path(Path(__file__).resolve(), "install_config.toml"),
+        required=True,
     )
 
     args = parser.parse_args()
 
-    cfg = InstallConfig(Path(args.config).resolve(True))
+    cfg = (
+        InstallConfig(Path(args.config).resolve(True))
+        if "config" in args
+        else sys.exit(EC.CONFIG_NOT_PROVIDED.value)
+    )
 
     print("Validated config:")
     pprint(vars(cfg))
@@ -175,15 +186,16 @@ if __name__ == "__main__":
         install_addon(cfg)
 
         print("Trying to activate addons")
-        if not install_pip(cfg):
-            sys.exit(1)
+        if (ec := install_pip(cfg)) != 0:
+            sys.exit(ec)
 
-        if not activate_addons(cfg):
-            sys.exit(1)
+        if (ec := activate_addons(cfg)) != 0:
+            sys.exit(ec)
 
-        if not run_custom_script(cfg):
-            sys.exit(1)
+        if (ec := run_custom_script(cfg)) != 0:
+            sys.exit(ec)
 
     else:
         print(f"Installation on this OS({PLATFORM}) is not supported.")
         print("Please install addon manually...")
+        sys.exit(EC.PLATFORM_NOT_SUPPORTED.value)

@@ -3,7 +3,8 @@ import sys
 import shutil
 from shutil import ignore_patterns
 from pathlib import Path
-from install_config import InstallConfig, PLATFORM
+from install_config import InstallConfig
+from install_platform import PLATFORM, EC
 from typing import List, Dict, Set, Tuple, Optional
 from subprocess import Popen, PIPE
 from checksum_file import checksum_and_copy
@@ -12,17 +13,23 @@ from install_proc_utils import rmtree_protected
 
 def try_to_install(cfg: InstallConfig):
     """Tries to symlink addon to addon folder, if fails - copies addon's files.
+    Then tries to copy/compile binaries.
+    If all the tries exausted, exits with error code.
 
     Parameters:
     -----------
     cfg : InstallConfig
         Object with parsed and verified configuration.
     """
-    symlynk_or_copy(cfg)
-    manage_binaries(cfg)
+    try:
+        symlink_or_copy(cfg)
+        manage_binaries(cfg)
+    except Exception as e:
+        print(f"Failed to install addon: {e}")
+        sys.exit(EC.ADDON_NOT_INSTALLED.value)
 
 
-def symlynk_or_copy(cfg: InstallConfig):
+def symlink_or_copy(cfg: InstallConfig):
     """Tries to install addon to specified folder. As the fastest and by far best
     solution tries to symlink the blender_install to addon folder, so upon running
     Blender it just resolves to this folder with an addon. Otherwise tries to copy
@@ -131,6 +138,7 @@ def create_symlink_or_copy(cfg: InstallConfig):
 
         except Exception as e:
             print(f"All installation methods exausted. Tree copy failed: {e}")
+            sys.exit(EC.ADDON_NOT_INSTALLED.value)
 
 
 def manage_binaries(cfg: InstallConfig):
