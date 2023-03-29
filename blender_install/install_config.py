@@ -1,6 +1,7 @@
 import os
 import sys
 import toml
+import shutil
 from pprint import pprint
 from pathlib import Path
 from typing import Dict, Set, List, Optional, Union, Any
@@ -21,12 +22,14 @@ class InstallConfig:
     blender_python_dir: Path
     blender_python_version: str
     blender_version: str
+
     addon_path_autodetect: bool
     addon_path_user: bool
     addon_name: str
     addon_path: Path
     addon_create_link: bool
     addon_allowed_paths: Set[Path]
+
     use_ignore: bool
     use_include: bool
 
@@ -61,7 +64,7 @@ class InstallConfig:
         self.addon_name = cfg.get("blender_install", "blender_install")
         self.addon_path_autodetect = cfg.get("addon_path_autodetect", True)
         self.addon_path_user = cfg.get("addon_path_user", True)
-        self.addon_allowed_paths = set(cfg.get("addon_allowed_paths", []))
+        self.addon_allowed_paths = self.get_allowed_paths(cfg)
         self.current_folder = Path(os.getcwd()).resolve(True)
         self.blender_unpack = cfg.get("blender_unpack", True)
         self.blender_packed = cfg.get("blender_packed")
@@ -75,6 +78,10 @@ class InstallConfig:
         if not executable_exists(self.blender_path):
             if self.blender_unpack:
                 if self.blender_packed is not None:
+                    self.blender_packed = self.resolve_to_path(
+                        self.blender_packed, True
+                    )
+
                     if self.blender_packed.exists() and self.blender_packed.is_file():
                         print(
                             "blender_path is not found, but portable archive is found"
@@ -89,7 +96,7 @@ class InstallConfig:
             else:
                 raise OSError("Provided blender_path is not found or not executable")
 
-        self.blender_version = self.get_blender_version(self.blender_path)
+        self.blender_version = self.get_blender_version()
         self.blender_python_dir = self.get_blender_python_dir()
         self.blender_python_version = self.get_blender_python_version()
         self.addon_path = self.get_addon_path(cfg)
@@ -112,8 +119,8 @@ class InstallConfig:
         self.install_custom_timeout = cfg.get("install_custom_script", 30.0)
         self.install_custom_args = cfg.get("install_custom_args", [])
 
-        self.install_include = cfg.get("install_include")
-        self.install_exclude = cfg.get("install_exclude")
+        self.install_include = self.resolve_to_path(cfg.get("install_include"), True)
+        self.install_exclude = self.resolve_to_path(cfg.get("install_exclude"), True)
 
         if self.install_include is not None:
             self.install_include = Path(self.install_include).resolve(True)
@@ -131,7 +138,7 @@ class InstallConfig:
                     Path(__file__).resolve(True),
                     "..",
                     "blender_portable",
-                    "blender",
+                    "blender" if PLATFORM in {"Linux", "Darwin"} else "blender.exe",
                 ),
             )
         ).resolve()
@@ -203,37 +210,78 @@ class InstallConfig:
                 raise Exception(f"Platform: {PLATFORM} is not supported")
 
             # Detect addon path automatically if nothing is set
-            path = self.resolve_to_path(default_path)
+            path = self.resolve_to_path(default_path, True)
             print(f"Defaulted addon path:\t{default_path}")
             print(f"Autodetected addon path:\t{path}")
 
         else:
-            path = self.resolve_to_path(cfg.get("addon_path"))
+            path = self.resolve_to_path(cfg.get("addon_path"), True)
 
         if path is not None:
             return path
         else:
             raise OSError("Incorrect addon path")
 
-    def resolve_to_path(self, path: Optional[Union[str, Path]]) -> Optional[Path]:
+    def get_allowed_paths(self, cfg: Dict[str, Any]) -> Set[Path]:
+        return set(
+            (
+                pv
+                for p in cfg.get("addon_allowed_paths", [])
+                if (pv := self.resolve_to_path(p, False)) is not None
+            )
+        )
+
+    def resolve_to_path(
+        self, path: Optional[Union[str, Path]], strict: bool
+    ) -> Optional[Path]:
+        """Processes the acquired path and tries to resolve to it.
+
+        Parameters:
+        -----------
+        path : Optional[Union[str, Path]]
+            Input string or Path object.
+        strict : bool
+            Only return existing paths.
+
+        Returns:
+        --------
+        Optional[Path]
+            Resolved path.
+        """
+        p = None
+
         if path is None:
             return None
 
         elif isinstance(path, str):
             if path.startswith("~/"):
-                p = Path(Path.home(), path[1::])
-                return p
+                p = Path(Path.home(), path[2::]).absolute()
             else:
-                return Path(path)
+                p = Path(
+                    os.path.normpath(os.path.join(os.path.dirname(__file__), path))
+                ).absolute()
         else:
-            return path
+            p = path.absolute()
 
-        return None
+        if strict:
+            return p if p.exists() else None
+        else:
+            return p
 
-    def get_blender_version(self, path: Path) -> str:
-        """Runs provided Blender executable and gets version."""
+    def get_blender_version(self) -> str:
+        """Runs provided Blender executable and gets version.
+
+        Returns:
+        --------
+        str
+            Version of Blender in x.x format.
+        """
         ec, so, se, er = run_process(
-            [str(self.blender_path), "--version"], "Failed to get Blender version", 2
+            [str(self.blender_path), "--version"],
+            "Failed to get Blender version",
+            2,
+            os.getcwd(),
+            False,
         )
 
         if ec is not None:
@@ -246,7 +294,7 @@ class InstallConfig:
         ver = so.split("\n\t")[0].split()[1].split(".")[0:2]
         return ".".join(ver)
 
-    def get_script_file(self, cfg: Dict[str, Any], script_name) -> Optional[Path]:
+    def get_script_file(self, cfg: Dict[str, Any], script_name: str) -> Optional[Path]:
         """Checks that custom install Python script is provided.
 
         Parameters:
@@ -255,6 +303,11 @@ class InstallConfig:
             Parsed toml file.
         script_name : str
             Name of the custom file.
+
+        Returns:
+        --------
+        Optional[Path]
+            Path of script file.
         """
         script_file = cfg.get(script_name)
 
@@ -370,6 +423,7 @@ def unpack_portable_blender(cfg: InstallConfig):
             with tarfile.open(str(source)) as f:
                 try:
                     ms = f.getmembers()
+                    # Remove the name of the root folder
                     m0 = len(ms[0].path)
 
                     for m in ms:
@@ -387,7 +441,26 @@ def unpack_portable_blender(cfg: InstallConfig):
 
             with zipfile.ZipFile(str(source)) as f:
                 try:
-                    f.extractall(str(target), f.filelist[1::])
+                    root = f.namelist()[0]
+
+                    for member in f.namelist():
+                        if member == root:
+                            continue
+
+                        if member.endswith("/"):
+                            os.makedirs(
+                                os.path.join(str(target), member.removeprefix(root)),
+                                exist_ok=True,
+                            )
+                            continue
+
+                        # copy file (taken from zipfile's extract)
+                        ef = f.open(member)
+                        with open(
+                            os.path.join(str(target), member.removeprefix(root)), "wb"
+                        ) as tgt:
+                            shutil.copyfileobj(ef, tgt)
+
                 except Exception as e:
                     print(f"Failed to extract: {e}")
 

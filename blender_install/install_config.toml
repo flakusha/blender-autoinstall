@@ -12,7 +12,7 @@ blender_packed = "../binaries/blender-portable.tar.xz"
 addon_allowed_paths = [
  "../blender_portable",
  "../bin",
- "bin",
+ "./bin",
 ]
 
 # Blender path for installation - by default locally unpacked blender portable
@@ -51,7 +51,7 @@ install_activate_script = "install_activate.py"
 # Activate listed addons by their names
 activate_addons = [
  "blender_install",
- "f2",
+ "mesh_f2",
 ]
 
 # Use custom script to implement required functionality

@@ -199,3 +199,5 @@ if __name__ == "__main__":
         print(f"Installation on this OS({PLATFORM}) is not supported.")
         print("Please install addon manually...")
         sys.exit(EC.PLATFORM_NOT_SUPPORTED.value)
+
+    print("Installation finished")
