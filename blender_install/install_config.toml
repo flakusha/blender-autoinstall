@@ -40,6 +40,9 @@ install_exclude = "install_exclude.txt"
 
 # Use custom script to install pip, will be skipped if pip is not provided
 install_pip_script = "install_pip.py"
+# If your connection is inconsistent and slow - provide timeout for PIP to load
+# modules
+install_pip_timeout = 60.0
 # This will install additional Python modules for use with your addon
 # pip install format is supported
 pip_modules = [

@@ -19,9 +19,14 @@ blend_cwd = str(os.path.dirname(python_blender))
 python_target = str(Path(sys.prefix, "lib", python_dir, "site-packages"))
 
 
-def install_pip() -> Tuple[Optional[int], str, str, Optional[Exception]]:
+def install_pip(timeout: float) -> Tuple[Optional[int], str, str, Optional[Exception]]:
     """Picks environment of the blender instance that run it and runs ensurepip for
-    this environment. Doesn't require any arguments.
+    this environment.
+
+    Parameters:
+    -----------
+    timeout : float
+        Timeout before installation is terminated.
 
     Returns:
     --------
@@ -38,19 +43,21 @@ def install_pip() -> Tuple[Optional[int], str, str, Optional[Exception]]:
     ]
 
     ec, so, se, er = run_process(
-        pip_cmd, "PIP installation failed", 15, blend_cwd, False
+        pip_cmd, "PIP installation failed", timeout, blend_cwd, False
     )
 
     return ec, so, se, er
 
 
-def install_pip_modules(modules: List[str]) -> bool:
+def install_pip_modules(modules: List[str], timeout: float) -> bool:
     """Installs all the pip modules provided in the list.
 
     Parameters:
     -----------
     modules : List[str]
         List of modules' names.
+    timeout : float
+        Timeout before installation is terminated.
 
     Returns:
     --------
@@ -61,7 +68,7 @@ def install_pip_modules(modules: List[str]) -> bool:
     install_succeed = []
 
     for module in modules:
-        install_succeed.append(install_module(module, python_target))
+        install_succeed.append(install_module(module, python_target, timeout))
 
     res = set(install_succeed)
 
@@ -71,7 +78,7 @@ def install_pip_modules(modules: List[str]) -> bool:
     return False
 
 
-def install_module(module: str, target: str) -> Optional[int]:
+def install_module(module: str, target: str, timeout: float) -> Optional[int]:
     """Installs PIP module to the target environment.
 
     Parameters:
@@ -80,6 +87,8 @@ def install_module(module: str, target: str) -> Optional[int]:
         Name of the module.
     target : str
         Pip target directory.
+    timeout : float
+        Timeout before installation is terminated.
 
     Returns:
     --------
@@ -102,7 +111,7 @@ def install_module(module: str, target: str) -> Optional[int]:
     ec, so, se, er = run_process(
         pip_cmd,
         f"Could not install pip module: {module}",
-        60,
+        timeout,
         blend_cwd,
         True,
     )
@@ -111,15 +120,6 @@ def install_module(module: str, target: str) -> Optional[int]:
 
 
 if __name__ == "__main__":
-    # Pip will be installed in any case
-    ec, so, se, er = install_pip()
-
-    if ec is not None:
-        if ec != 0:
-            sys.exit(EC.PIP_NOT_INSTALLED.value)
-    else:
-        sys.exit(EC.PIP_NOT_INSTALLED.value)
-
     parser = argparse.ArgumentParser(
         description="pip and pip modules install script",
         add_help=True,
@@ -128,9 +128,6 @@ if __name__ == "__main__":
 
     if "--" in argv:
         argv = argv[argv.index("--") + 1 :]
-    else:
-        # No additional arguments provided, exiting without error
-        sys.exit()
 
     parser.add_argument(
         "-m",
@@ -139,8 +136,28 @@ if __name__ == "__main__":
         type=str,
         help="Comma-separated list of pip modules in format supported by pip",
     )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=float,
+        help="Timeout to install pip and modules in case of weak Internet connection",
+    )
 
     args = parser.parse_args(argv)
+    timeout: float = args.timeout
+
+    ec, so, se, er = install_pip(timeout)
+
+    if ec is not None:
+        if ec != 0:
+            sys.exit(EC.PIP_NOT_INSTALLED.value)
+    else:
+        sys.exit(EC.PIP_NOT_INSTALLED.value)
+
+    if "modules" not in args:
+        # Exit without error as no additional parameters are provided
+        sys.exit()
+
     pip_modules: List[str] = []
 
     # Extract comma-separated python modules
@@ -150,6 +167,6 @@ if __name__ == "__main__":
             pip_modules = [m.strip() for m in pip_modules]
 
         if len(pip_modules) > 0:
-            if not install_pip_modules(pip_modules):
+            if not install_pip_modules(pip_modules, timeout):
                 print("All or some pip modules are installed incorrectly")
                 sys.exit(EC.PIP_MODULES_NOT_INSTALLED.value)

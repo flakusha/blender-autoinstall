@@ -41,6 +41,7 @@ class InstallConfig:
 
     current_folder: Path
     install_pip_script: Optional[Path]
+    install_pip_timeout: float
     pip_modules: Optional[str]
     install_activate_script: Optional[Path]
     activate_addons: List[str]
@@ -110,6 +111,7 @@ class InstallConfig:
 
         # Get custom scripts for installation of additional components
         self.install_pip_script = self.get_script_file(cfg, "install_pip_script")
+        self.install_pip_timeout = cfg.get("install_pip_timeout", 30.0)
         self.pip_modules = cfg.get("pip_modules", [])
         self.install_activate_script = self.get_script_file(
             cfg, "install_activate_script"

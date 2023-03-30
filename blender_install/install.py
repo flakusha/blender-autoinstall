@@ -48,6 +48,7 @@ def install_pip(cfg: InstallConfig) -> Optional[int]:
     """
     if cfg.install_pip_script is None:
         print("No PIP install script provided, skipping")
+        return 0
 
     cmd = [
         str(cfg.blender_path),
@@ -56,13 +57,19 @@ def install_pip(cfg: InstallConfig) -> Optional[int]:
         str(cfg.install_pip_script),
     ]
 
+    if cfg.install_pip_timeout != 0:
+        cmd.extend(["--", "-t", cfg.install_pip_timeout])
+
     if cfg.pip_modules is not None:
         if len(cfg.pip_modules) > 0:
-            cmd.extend(["--", "-m", ",".join(m for m in cfg.pip_modules)])
+            cmd.extend(["-m", ",".join(m for m in cfg.pip_modules)])
 
     print("Trying to install PIP")
     ec, so, se, er = run_process(
-        cmd, "Failed to install pip or pip modules", 30, print_std=False
+        cmd,
+        "Failed to install pip and/or pip modules",
+        cfg.install_pip_timeout * (len(cfg.pip_modules) + 1),
+        print_std=False,
     )
 
     return ec
@@ -89,7 +96,7 @@ def activate_addons(cfg: InstallConfig) -> Optional[int]:
 
     if cfg.install_activate_script is None:
         print("No activation script provided, but activation is requested, aborting")
-        return False
+        return 0
 
     cmd = [
         str(cfg.blender_path),
@@ -134,7 +141,7 @@ def run_custom_script(cfg: InstallConfig) -> Optional[int]:
     """
     if cfg.install_custom_script is None:
         print("Skipping custom script")
-        return True
+        return 0
 
     cmd = [
         str(cfg.blender_path),
